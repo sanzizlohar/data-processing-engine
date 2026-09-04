@@ -99,10 +99,13 @@ async def main() -> None:
 
     import uvicorn
 
-    parser = argparse.ArgumentParser(description="Streaming engine + REST API")
+    parser = argparse.ArgumentParser(description="Streaming engine + REST API + dashboard")
     parser.add_argument("--eps", type=int, default=None)
     parser.add_argument("--seconds", type=int, default=600)
     parser.add_argument("--port", type=int, default=None)
+    parser.add_argument("--time-scale", type=float, default=None,
+                        help="event-time compression (10 = minute-windows rotate every 6s; "
+                             "great for demos, 1.0 = real time)")
     args = parser.parse_args()
 
     configure("INFO")
@@ -111,6 +114,8 @@ async def main() -> None:
         cfg.generator.events_per_second = args.eps
     if args.port:
         cfg.api.port = args.port
+    if args.time_scale is not None:
+        cfg.generator.time_scale = args.time_scale
 
     store = create_store(cfg)
     memory = MemoryAggregates(hot_minutes=cfg.routing.hot_window_minutes)

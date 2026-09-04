@@ -5,6 +5,17 @@ streaming ingestion with sub-second micro-batches, automated insights generation
 an intelligent query router, and a benchmark harness that measures the
 optimizations end-to-end.
 
+![Live demo — streaming pipeline, automated insights and the query router](docs/images/demo.gif)
+
+*The live dashboard: events streaming at ~1,000/s, p95 latency under half a
+second, insights generated automatically, and the query router answering a
+24-hour aggregate over 125K+ events in ~20 ms from pre-aggregated summaries.*
+
+![Architecture](docs/images/architecture.png)
+
+<details>
+<summary>ASCII version of the diagram</summary>
+
 ```
                  ┌──────────────────────────────────────────────────┐
                  │                   ingestion                      │
@@ -34,6 +45,21 @@ optimizations end-to-end.
                                        ▼
                              FastAPI REST service
 ```
+</details>
+
+## Visual tour
+
+**The live dashboard** — run `python -m src.api.app --time-scale 10` and open
+`http://127.0.0.1:8000/`: KPIs, throughput/p95-latency chart, revenue by region,
+the automated insights feed, and the storage layers — all updating in real time.
+
+![Live dashboard](docs/images/dashboard_live.png)
+
+**The intelligent query router** — click a query, see which backend answered,
+how fast, and why. Here a 24-hour aggregate over **126,774 events** is answered
+in **20.7 ms** from the pre-aggregated hourly summary instead of a raw scan:
+
+![Query router](docs/images/query_router.png)
 
 ## Resume claim → implementation → proof
 
@@ -56,11 +82,14 @@ python -m unittest discover -s tests   # 35 tests
 **Live visual demo** — run the engine + API and open the dashboard:
 
 ```bash
-python -m src.api.app --eps 800 --seconds 1800 --port 8000
+python -m src.api.app --eps 800 --seconds 1800 --time-scale 10 --port 8000
 # open http://127.0.0.1:8000/  → live KPIs, throughput/latency chart,
 # insights feed, revenue-by-region chart, and an interactive query-router
 # playground (click a query, see which backend answered and why)
 # interactive API docs: http://127.0.0.1:8000/docs
+# --time-scale 10 compresses event-time so minute-windows (and insights) rotate
+# every few seconds; drop it for real-time behavior. For long-running demos,
+# start from a fresh database (delete data/dpe.db*) to keep SQLite writes fast.
 ```
 
 For use cases and a step-by-step demo script, see [USE_CASES.md](USE_CASES.md)
