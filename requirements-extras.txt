@@ -1,0 +1,7 @@
+# Optional production backends — install only what you use:
+#   PostgreSQL storage:      pip install psycopg2-binary
+#   Spark streaming/batch:   pip install pyspark   (plus Java 17/21)
+#   Kafka ingestion:         pip install kafka-python
+psycopg2-binary>=2.9
+pyspark>=3.5.0
+kafka-python>=2.0.2

@@ -1,0 +1,5 @@
+# Core runtime (demo mode needs nothing else)
+numpy>=1.26
+PyYAML>=6.0
+fastapi>=0.110
+uvicorn>=0.29

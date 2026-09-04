@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data Processing Engine — Live Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #e6edf3;
+    --muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --amber: #d29922;
+    --red: #f85149; --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; padding: 18px 22px; }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+  header h1 { font-size: 19px; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  .pill { padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); }
+  .pill.on  { color: var(--green); border-color: var(--green); }
+  .pill.off { color: var(--red); border-color: var(--red); }
+  .pill.meta { color: var(--accent); }
+  .grid { display: grid; gap: 14px; }
+  .kpis { grid-template-columns: repeat(4, 1fr); }
+  .row2 { grid-template-columns: 3fr 2fr; }
+  .row3 { grid-template-columns: 2fr 1fr; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .card h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin-bottom: 10px; }
+  .kpi .v { font-size: 26px; font-weight: 700; }
+  .kpi .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .kpi .d { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  canvas { max-height: 220px; }
+  #insightFeed { display: flex; flex-direction: column; gap: 7px; max-height: 300px; overflow-y: auto; }
+  .insight { display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: #0d1117; }
+  .tag { flex: 0 0 86px; text-align: center; font-size: 10px; font-weight: 700; padding: 2px 0; border-radius: 5px; text-transform: uppercase; }
+  .t-critical { background: #f8514922; color: var(--red); }
+  .t-warning  { background: #d2992222; color: var(--amber); }
+  .t-info     { background: #58a6ff22; color: var(--accent); }
+  .insight .msg { font-size: 13px; }
+  .insight .kind { color: var(--purple); font-weight: 600; font-size: 12px; }
+  .insight .when { color: var(--muted); font-size: 11px; margin-left: auto; white-space: nowrap; }
+  .btnrow { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  button { background: #21262d; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12px; cursor: pointer; font-weight: 600; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  .routeResult { font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 10px; min-height: 90px; }
+  .routeResult b { color: var(--text); }
+  .backend { color: var(--green); font-weight: 700; }
+  .ms { color: var(--amber); font-weight: 700; }
+  .counts { font-size: 12px; color: var(--muted); display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; margin-top: 6px; }
+  .counts b { color: var(--text); }
+  footer { margin-top: 14px; color: var(--muted); font-size: 11px; }
+  .stale { opacity: .45; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Data Processing Engine</h1>
+  <span id="statusPill" class="pill off">engine idle</span>
+  <span id="storagePill" class="pill meta">storage: —</span>
+  <span class="sub">live stream · micro-batch 200 ms · automated insights · query router</span>
+</header>
+
+<div class="grid kpis">
+  <div class="card kpi"><div class="v" id="kpiEvents">0</div><div class="l">events processed</div><div class="d" id="kpiDropped">0 dropped</div></div>
+  <div class="card kpi"><div class="v" id="kpiEps">0</div><div class="l">throughput (events/s)</div><div class="d" id="kpiUptime">uptime —</div></div>
+  <div class="card kpi"><div class="v" id="kpiP95">—</div><div class="l">p95 stream latency</div><div class="d" id="kpiP50">p50 — · p99 —</div></div>
+  <div class="card kpi"><div class="v" id="kpiInsights">0</div><div class="l">automated insights</div><div class="d">generated live, no human input</div></div>
+</div>
+
+<div class="grid row2" style="margin-top:14px">
+  <div class="card"><h2>Throughput &amp; latency (live)</h2><canvas id="chartStream"></canvas></div>
+  <div class="card"><h2>Revenue by region — last 5 min (hot layer)</h2><canvas id="chartRegions"></canvas></div>
+</div>
+
+<div class="grid row3" style="margin-top:14px">
+  <div class="card"><h2>Automated insights feed</h2><div id="insightFeed"></div></div>
+  <div class="card">
+    <h2>Intelligent query router — try it</h2>
+    <div class="btnrow">
+      <button onclick="runQuery('point')">Point lookup</button>
+      <button onclick="runQuery('recent')">Recent 30-min agg</button>
+      <button onclick="runQuery('heavy')">Heavy 24-h agg</button>
+    </div>
+    <div class="routeResult" id="routeResult">Click a query — the router picks the cheapest backend that can answer it accurately and explains its decision.</div>
+    <h2 style="margin-top:14px">Storage</h2>
+    <div class="counts" id="counts"></div>
+  </div>
+</div>
+
+<footer>Demo mode uses a synthetic event generator; swap in Kafka/Postgres for production feeds. Refreshless — polls the API every 1–2 s.</footer>
+
+<script>
+const MAX_POINTS = 60;
+const regionData = { labels: [], values: [] };
+let lastInsightId = 0;
+let stale = false;
+
+function chartDefaults() {
+  return { responsive: true, animation: false,
+    plugins: { legend: { labels: { color: '#8b949e', font: { size: 11 } } } },
+    scales: { x: { ticks: { color: '#8b949e', maxTicksLimit: 8 }, grid: { color: '#21262d' } },
+              y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' }, beginAtZero: true } } };
+}
+
+const streamChart = new Chart(document.getElementById('chartStream'), {
+  type: 'line',
+  data: { labels: [],
+    datasets: [
+      { label: 'throughput (events/s)', data: [], borderColor: '#58a6ff', backgroundColor: '#58a6ff22', tension: .3, pointRadius: 0, yAxisID: 'y' },
+      { label: 'p95 latency (ms)', data: [], borderColor: '#d29922', backgroundColor: '#d2992222', tension: .3, pointRadius: 0, yAxisID: 'y1' },
+    ] },
+  options: { ...chartDefaults(),
+    scales: { ...chartDefaults().scales,
+      y1: { position: 'right', ticks: { color: '#d29922' }, grid: { drawOnChartArea: false }, beginAtZero: true } } },
+});
+
+const regionChart = new Chart(document.getElementById('chartRegions'), {
+  type: 'bar',
+  data: { labels: [], datasets: [{ label: 'revenue', data: [], backgroundColor: ['#58a6ff', '#3fb950', '#d29922', '#bc8cff', '#f85149'] }] },
+  options: { ...chartDefaults(), plugins: { legend: { display: false } } },
+});
+
+function setStale(v) { if (v !== stale) { stale = v; document.body.classList.toggle('stale', v); } }
+async function jget(url) { const r = await fetch(url); if (!r.ok) throw new Error(r.status); return r.json(); }
+
+async function pollStats() {
+  try {
+    const s = await jget('/stats');
+    setStale(false);
+    const c = s.counters || {};
+    document.getElementById('kpiEvents').textContent = (c.events_processed || 0).toLocaleString();
+    document.getElementById('kpiDropped').textContent = (c.events_dropped_queue || 0) + ' dropped';
+    document.getElementById('kpiEps').textContent = Math.round(s.throughput_eps || 0).toLocaleString();
+    document.getElementById('kpiUptime').textContent = s.elapsed_s != null ? ('uptime ' + s.elapsed_s + 's') : 'uptime —';
+    const lat = (s.timings || {}).stream_latency_ms;
+    if (lat) {
+      document.getElementById('kpiP95').textContent = lat.p95_ms.toFixed(1) + ' ms';
+      document.getElementById('kpiP50').textContent = 'p50 ' + lat.p50_ms.toFixed(1) + ' ms · p99 ' + lat.p99_ms.toFixed(1) + ' ms';
+      const now = new Date().toLocaleTimeString();
+      // Chart.js v4 copies config arrays at construction — push into the chart's live arrays
+      streamChart.data.labels.push(now);
+      streamChart.data.datasets[0].data.push(Math.round(s.throughput_eps || 0));
+      streamChart.data.datasets[1].data.push(lat.p95_ms);
+      if (streamChart.data.labels.length > MAX_POINTS) {
+        streamChart.data.labels.shift();
+        streamChart.data.datasets[0].data.shift();
+        streamChart.data.datasets[1].data.shift();
+      }
+      streamChart.update();
+    }
+    document.getElementById('kpiInsights').textContent = s.insights_generated || 0;
+  } catch (e) { setStale(true); }
+}
+
+async function pollRegions() {
+  try {
+    const r = await jget('/analytics/summary?minutes=5');
+    regionData.labels = r.result.map(x => x.dim);
+    regionData.values = r.result.map(x => Math.round(x.revenue));
+    regionChart.data.labels = regionData.labels;
+    regionChart.data.datasets[0].data = regionData.values;
+    regionChart.update();
+  } catch (e) {}
+}
+
+async function pollInsights() {
+  try {
+    const r = await jget('/insights?limit=12');
+    const feed = document.getElementById('insightFeed');
+    feed.innerHTML = '';
+    (r.insights || []).forEach(i => {
+      const div = document.createElement('div');
+      div.className = 'insight';
+      const time = (i.ts || '').slice(11, 19);
+      div.innerHTML = `<span class="tag t-${i.severity}">${i.severity}</span>
+        <span><span class="kind">${i.kind}</span> <span class="msg">${i.message}</span></span>
+        <span class="when">${time}</span>`;
+      feed.appendChild(div);
+    });
+    if (!(r.insights || []).length) feed.innerHTML = '<div class="routeResult">No insights yet — the engine needs a few minutes of windows to build a baseline.</div>';
+  } catch (e) {}
+}
+
+async function pollHealth() {
+  try {
+    const h = await jget('/health');
+    const p = document.getElementById('statusPill');
+    p.textContent = h.engine_running ? 'engine running' : 'engine idle';
+    p.className = 'pill ' + (h.engine_running ? 'on' : 'off');
+    document.getElementById('storagePill').textContent = 'storage: ' + h.storage;
+  } catch (e) { setStale(true); }
+}
+
+async function pollCounts() {
+  try {
+    const c = await jget('/storage/counts');
+    document.getElementById('counts').innerHTML =
+      `<span>events</span><b>${(c.events || 0).toLocaleString()}</b>` +
+      `<span>1-min aggregates</span><b>${(c.aggregates_1m || 0).toLocaleString()}</b>` +
+      `<span>hourly summary</span><b>${(c.summary_hourly || 0).toLocaleString()}</b>` +
+      `<span>insights rows</span><b>${(c.insights || 0).toLocaleString()}</b>`;
+  } catch (e) {}
+}
+
+async function runQuery(kind) {
+  const out = document.getElementById('routeResult');
+  out.innerHTML = 'routing…';
+  try {
+    let body;
+    if (kind === 'point') {
+      const u = await jget('/sample-user');
+      body = { kind: 'point', user_id: u.user_id };
+    } else if (kind === 'recent') {
+      body = { kind: 'recent_agg', minutes: 30 };
+    } else {
+      const end = new Date().toISOString();
+      const start = new Date(Date.now() - 24 * 3600e3).toISOString();
+      body = { kind: 'heavy_agg', start_iso: start, end_iso: end };
+    }
+    const r = await fetch('/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const d = await r.json();
+    const rows = (d.result || []);
+    const total = rows.reduce((a, x) => a + (x.events || 0), 0);
+    out.innerHTML = `<div><b>backend:</b> <span class="backend">${d.backend}</span> &nbsp; <b>took:</b> <span class="ms">${d.elapsed_ms} ms</span> &nbsp; <b>rows:</b> ${rows.length}${total ? ' (' + total.toLocaleString() + ' events)' : ''} ${d.cache_hit ? '· <b>cache hit</b>' : ''}</div>
+      <div style="margin-top:6px">${d.rationale || ''}</div>`;
+  } catch (e) { out.innerHTML = 'query failed: ' + e.message; }
+}
+
+pollHealth(); pollStats(); pollRegions(); pollInsights(); pollCounts();
+setInterval(pollStats, 1000);
+setInterval(pollRegions, 2000);
+setInterval(pollInsights, 2500);
+setInterval(pollHealth, 5000);
+setInterval(pollCounts, 5000);
+</script>
+</body>
+</html>

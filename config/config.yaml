@@ -1,0 +1,40 @@
+storage:
+  backend: auto            # auto | postgres | sqlite
+  sqlite_path: data/dpe.db
+  pg_dsn: postgresql://dpe:dpe@localhost:5432/dpe
+
+generator:
+  events_per_second: 500
+  burst_every_seconds: 15
+  burst_duration_seconds: 5
+  burst_multiplier: 4
+  time_scale: 1.0          # >1 compresses event-time (demos); 1.0 = real time
+
+engine:
+  micro_batch_ms: 200      # sub-second micro-batch trigger
+  max_batch_size: 5000
+  flush_interval_s: 1.0
+  insights_every_n_batches: 5
+  parallel_workers: 0      # 0 = auto (cpu_count - 1)
+  chunk_size: 5000
+  parallel_min_batch: 5000 # batches below this size transform inline
+
+insights:
+  zscore_threshold: 3.0
+  critical_zscore: 5.0
+  baseline_windows: 20
+  cooldown_seconds: 30
+  trend_min_points: 8
+  trend_sensitivity: 0.15
+  refund_rate_threshold: 0.05
+  min_purchases_for_rate: 20
+
+routing:
+  hot_window_minutes: 60
+  cache_ttl_seconds: 15
+  cache_max_items: 256
+  spark_enabled: false
+
+api:
+  host: 127.0.0.1
+  port: 8000
